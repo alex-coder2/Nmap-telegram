@@ -562,7 +562,7 @@ def main():
     app.add_handler(CommandHandler("quiz", quiz_command))
     app.add_handler(CommandHandler("scenario", scenario_command))
     app.add_handler(CommandHandler("stats", stats_command))
-
+   
 app.add_handler(CommandHandler("admin_stats", admin_stats_command))
 
     # Komut olmayan tüm text mesajlar fallback'e gider
