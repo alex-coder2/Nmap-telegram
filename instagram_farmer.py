@@ -18,23 +18,52 @@ PROXIES = [
 
 # === GEÇİCİ E-POSTA ===
 def create_temp_email():
-    response = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1")
-    email = response.json()[0]
-    login, domain = email.split("@")
-    return email, login, domain
+    try:
+        response = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", timeout=10)
+        response.raise_for_status()
+
+        if not response.text.strip():
+            print("⚠️ API boş yanıt döndü.")
+            return None, None, None
+
+        data = response.json()
+
+        if not data or not isinstance(data, list) or len(data) == 0:
+            print("⚠️ Geçersiz API yanıtı:", data)
+            return None, None, None
+
+        email = data[0]
+        login, domain = email.split("@")
+        return email, login, domain
+
+    except requests.exceptions.RequestException as e:
+        print(f"⛔ API istek hatası: {e}")
+        return None, None, None
+    except ValueError as e:
+        print(f"⛔ JSON çözümleme hatası: {e} | Yanıt içeriği: {response.text}")
+        return None, None, None
+    except Exception as e:
+        print(f"⛔ Beklenmedik hata: {e}")
+        return None, None, None
 
 def get_verification_code(login, domain):
     for _ in range(10):
         time.sleep(5)
-        inbox = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}")
-        messages = inbox.json()
-        if messages:
-            msg_id = messages[0]['id']
-            msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}")
-            content = msg.json()['body']
-            import re
-            code = re.search(r'\b\d{6}\b', content)
-            return code.group() if code else None
+        try:
+            inbox = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}", timeout=10)
+            inbox.raise_for_status()
+            messages = inbox.json()
+
+            if messages:
+                msg_id = messages[0]['id']
+                msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}", timeout=10)
+                msg.raise_for_status()
+                content = msg.json().get('body', '')
+                import re
+                code = re.search(r'\b\d{6}\b', content)
+                return code.group() if code else None
+        except Exception as e:
+            print(f"⚠️ Kod alınamadı: {e}")
     return None
 
 # === DRIVER SETUP ===
@@ -56,7 +85,6 @@ def generate_random_username():
 def register_instagram_account(driver, email, username, password):
     driver.get("https://www.instagram.com/accounts/emailsignup/")
     time.sleep(DELAY)
-
     driver.find_element(By.NAME, "emailOrPhone").send_keys(email)
     time.sleep(1)
     driver.find_element(By.NAME, "fullName").send_keys(username)
@@ -65,9 +93,8 @@ def register_instagram_account(driver, email, username, password):
     time.sleep(1)
     driver.find_element(By.NAME, "password").send_keys(password)
     time.sleep(1)
-
     driver.find_element(By.XPATH, "//button[contains(text(),'Sign up')]").click()
-    time.sleep(DELAY*2)
+    time.sleep(DELAY * 2)
 
     code = get_verification_code(*email.split("@"))
     if code:
@@ -108,8 +135,14 @@ def main():
         print(f"[{i+1}/5] Yeni hesap oluşturuluyor...")
         proxy = random.choice(PROXIES)
         driver = setup_driver(proxy)
+
         try:
             email, login, domain = create_temp_email()
+            if not email:
+                print(f"[{i+1}/5] ❌ E-posta alınamadı, işlem atlanıyor.")
+                driver.quit()
+                continue
+
             username = generate_random_username()
             password = "Aali1234**"
             print(f"[{i+1}/5] E-posta: {email}")
@@ -123,6 +156,7 @@ def main():
             follow_target_user(driver, TARGET_ACCOUNT)
             driver.get("https://www.instagram.com/accounts/logout/")
             print(f"[{i+1}/5] ✅ @{username} çıkış yapıldı.")
+
         except Exception as e:
             print(f"[{i+1}/5] ❌ Hata: {e}")
         finally:
