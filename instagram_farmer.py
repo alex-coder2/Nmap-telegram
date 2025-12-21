@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 
 # === AYARLAR ===
-TARGET_ACCOUNT = "leomessi"
+TARGET_ACCOUNT = "ali.cagan1427"
 DELAY = 3
 PROXIES = [
     "http://138.197.150.238:80",
