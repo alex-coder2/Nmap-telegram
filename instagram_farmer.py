@@ -16,63 +16,54 @@ PROXIES = [
     "http://159.203.124.150:80"
 ]
 
-# === GEÇİCİ E-POSTA ===
+# === GEÇİCİ E-POSTA (Guerrillamail) ===
+session_id = None
+
 def create_temp_email():
+    global session_id
     try:
-        response = requests.get("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", timeout=10)
+        response = requests.get("https://www.guerrillamail.com/ajax.php?f=get_email_address", timeout=10)
         response.raise_for_status()
-
-        if not response.text.strip():
-            print("⚠️ API boş yanıt döndü.")
-            return None, None, None
-
         data = response.json()
-
-        if not data or not isinstance(data, list) or len(data) == 0:
-            print("⚠️ Geçersiz API yanıtı:", data)
-            return None, None, None
-
-        email = data[0]
-        login, domain = email.split("@")
-        return email, login, domain
-
-    except requests.exceptions.RequestException as e:
-        print(f"⛔ API istek hatası: {e}")
-        return None, None, None
-    except ValueError as e:
-        print(f"⛔ JSON çözümleme hatası: {e} | Yanıt içeriği: {response.text}")
-        return None, None, None
+        session_id = data.get("sid")
+        email = data.get("email_addr")
+        if not email or not session_id:
+            print("⚠️ Geçersiz e-posta veya session.")
+            return None
+        return email
     except Exception as e:
-        print(f"⛔ Beklenmedik hata: {e}")
-        return None, None, None
+        print(f"⛔ Guerrillamail e-posta alınamadı: {e}")
+        return None
 
-def get_verification_code(login, domain):
-    for _ in range(10):
-        time.sleep(5)
-        try:
-            inbox = requests.get(f"https://www.1secmail.com/api/v1/?action=getMessages&login={login}&domain={domain}", timeout=10)
-            inbox.raise_for_status()
-            messages = inbox.json()
-
-            if messages:
-                msg_id = messages[0]['id']
-                msg = requests.get(f"https://www.1secmail.com/api/v1/?action=readMessage&login={login}&domain={domain}&id={msg_id}", timeout=10)
-                msg.raise_for_status()
-                content = msg.json().get('body', '')
+def get_verification_code():
+    global session_id
+    if not session_id:
+        return None
+    url = f"https://www.guerrillamail.com/ajax.php?f=get_emails&sid_token={session_id}"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        emails = response.json().get("list", [])
+        for email in emails:
+            if "Instagram" in email.get("mail_subject", ""):
+                body = email.get("mail_body", "")
                 import re
-                code = re.search(r'\b\d{6}\b', content)
-                return code.group() if code else None
-        except Exception as e:
-            print(f"⚠️ Kod alınamadı: {e}")
-    return None
+                code = re.search(r'\b\d{6}\b', body)
+                if code:
+                    return code.group()
+        return None
+    except Exception as e:
+        print(f"⛔ Kod okunamadı: {e}")
+        return None
 
 # === DRIVER SETUP ===
-def setup_driver(proxy):
+def setup_driver(proxy=None):
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument(f'--proxy-server={proxy}')
+    if proxy:
+        options.add_argument(f'--proxy-server={proxy}')
     driver = webdriver.Chrome(options=options)
     return driver
 
@@ -96,15 +87,18 @@ def register_instagram_account(driver, email, username, password):
     driver.find_element(By.XPATH, "//button[contains(text(),'Sign up')]").click()
     time.sleep(DELAY * 2)
 
-    code = get_verification_code(*email.split("@"))
-    if code:
-        inputs = driver.find_elements(By.XPATH, "//input[@aria-label='Confirmation Code']")
-        for i, digit in enumerate(code):
-            inputs[i].send_keys(digit)
-        time.sleep(DELAY)
-        driver.find_element(By.XPATH, "//button[contains(text(),'Confirm')]").click()
-        time.sleep(DELAY)
-        return True
+    # Doğrulama kodu bekle
+    for _ in range(10):
+        code = get_verification_code()
+        if code:
+            inputs = driver.find_elements(By.XPATH, "//input[@aria-label='Confirmation Code']")
+            for i, digit in enumerate(code):
+                inputs[i].send_keys(digit)
+            time.sleep(DELAY)
+            driver.find_element(By.XPATH, "//button[contains(text(),'Confirm')]").click()
+            time.sleep(DELAY)
+            return True
+        time.sleep(5)
     return False
 
 # === LOGIN ===
@@ -133,18 +127,18 @@ def follow_target_user(driver, target):
 def main():
     for i in range(5):
         print(f"[{i+1}/5] Yeni hesap oluşturuluyor...")
-        proxy = random.choice(PROXIES)
+        proxy = random.choice(PROXIES) if PROXIES else None
         driver = setup_driver(proxy)
 
         try:
-            email, login, domain = create_temp_email()
+            email = create_temp_email()
             if not email:
-                print(f"[{i+1}/5] ❌ E-posta alınamadı, işlem atlanıyor.")
+                print(f"[{i+1}/5] ❌ E-posta alınamadı.")
                 driver.quit()
                 continue
 
             username = generate_random_username()
-            password = "Aali1234**"
+            password = "Ali123**"
             print(f"[{i+1}/5] E-posta: {email}")
 
             if not register_instagram_account(driver, email, username, password):
