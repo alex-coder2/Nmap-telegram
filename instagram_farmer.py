@@ -2,13 +2,17 @@ import random
 import time
 import string
 import requests
+import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # === AYARLAR ===
 TARGET_ACCOUNT = "ali.cagan1427"
 DELAY = 3
+PASSWORD = "Ali123**"
 PROXIES = [
     "http://138.197.150.238:80",
     "http://167.99.31.193:80",
@@ -16,45 +20,27 @@ PROXIES = [
     "http://159.203.124.150:80"
 ]
 
-# === GEÇİCİ E-POSTA (Guerrillamail) ===
-session_id = None
-
+# === GEÇİCİ E-POSTA: TempMail.ninja ===
 def create_temp_email():
-    global session_id
+    url = "https://www.tempmail.ninja/api/v1/mailbox"
     try:
-        response = requests.get("https://www.guerrillamail.com/ajax.php?f=get_email_address", timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        session_id = data.get("sid")
-        email = data.get("email_addr")
-        if not email or not session_id:
-            print("⚠️ Geçersiz e-posta veya session.")
-            return None
-        return email
+        res = requests.get(url, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+        email = data.get("email")
+        if email:
+            print(f"📬 Temp e-posta alındı: {email}")
+            return email
+        print("⚠️ Geçersiz e-posta yanıt.")
+        return None
     except Exception as e:
-        print(f"⛔ Guerrillamail e-posta alınamadı: {e}")
+        print(f"⛔ TempMail.ninja yanıt vermedi: {e}")
         return None
 
+# === (Şimdilik kod okuma pasif, ileride entegre edebiliriz) ===
 def get_verification_code():
-    global session_id
-    if not session_id:
-        return None
-    url = f"https://www.guerrillamail.com/ajax.php?f=get_emails&sid_token={session_id}"
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        emails = response.json().get("list", [])
-        for email in emails:
-            if "Instagram" in email.get("mail_subject", ""):
-                body = email.get("mail_body", "")
-                import re
-                code = re.search(r'\b\d{6}\b', body)
-                if code:
-                    return code.group()
-        return None
-    except Exception as e:
-        print(f"⛔ Kod okunamadı: {e}")
-        return None
+    print("🚨 TempMail.ninja'da kod okuma henüz desteklenmiyor.")
+    return None
 
 # === DRIVER SETUP ===
 def setup_driver(proxy=None):
@@ -87,19 +73,10 @@ def register_instagram_account(driver, email, username, password):
     driver.find_element(By.XPATH, "//button[contains(text(),'Sign up')]").click()
     time.sleep(DELAY * 2)
 
-    # Doğrulama kodu bekle
-    for _ in range(10):
-        code = get_verification_code()
-        if code:
-            inputs = driver.find_elements(By.XPATH, "//input[@aria-label='Confirmation Code']")
-            for i, digit in enumerate(code):
-                inputs[i].send_keys(digit)
-            time.sleep(DELAY)
-            driver.find_element(By.XPATH, "//button[contains(text(),'Confirm')]").click()
-            time.sleep(DELAY)
-            return True
-        time.sleep(5)
-    return False
+    print("🔔 Lütfen doğrulama kodunu manuel olarak girin...")
+    input("✅ Doğrulama tamamlandıysa ENTER tuşuna basın...")
+
+    return True
 
 # === LOGIN ===
 def login_to_instagram(driver, username, password):
@@ -117,11 +94,13 @@ def follow_target_user(driver, target):
     driver.get(f"https://www.instagram.com/{target}/")
     time.sleep(DELAY)
     try:
-        follow_button = driver.find_element(By.XPATH, "//button[contains(text(),'Follow')]")
+        follow_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Follow')]"))
+        )
         follow_button.click()
-        print(f"@{target} takip edildi.")
+        print(f"✅ @{target} takip edildi.")
     except Exception as e:
-        print(f"Takip başarısız: {e}")
+        print(f"❌ Takip başarısız: {e}")
 
 # === MAIN LOOP ===
 def main():
@@ -138,8 +117,8 @@ def main():
                 continue
 
             username = generate_random_username()
-            password = "Ali123**"
-            print(f"[{i+1}/5] E-posta: {email}")
+            password = PASSWORD
+            print(f"[{i+1}/5] E-posta: {email}, Kullanıcı: {username}")
 
             if not register_instagram_account(driver, email, username, password):
                 print(f"[{i+1}/5] ❌ Kayıt başarısız.")
