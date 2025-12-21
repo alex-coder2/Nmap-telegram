@@ -2,7 +2,7 @@ import subprocess
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN"
+TELEGRAM_TOKEN = "8050101740:AAESNDl0BmnJnooZzfebQ_N6bTOy3t8d9oQ"
 
 def start(update: Update, context: CallbackContext):
     update.message.reply_text("🔧 Bot çalışıyor. /mass_account_follow komutunu kullan.")
